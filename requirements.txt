@@ -1,0 +1,8 @@
+python-dotenv>=1.0.0
+
+# LLM — подключите нужный SDK при интеграции (v0.2+)
+# openai>=1.0.0
+# google-generativeai>=0.8.0
+
+# Telegram (v0.2)
+# python-telegram-bot>=21.0

@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Event",
+  "type": "object",
+  "required": ["id", "type", "title", "url", "source", "fetched_at"],
+  "properties": {
+    "id": { "type": "string" },
+    "type": { "enum": ["meetup", "internship", "conference"] },
+    "title": { "type": "string" },
+    "date": { "type": ["string", "null"], "format": "date" },
+    "date_end": { "type": ["string", "null"], "format": "date" },
+    "location": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "url": { "type": "string" },
+    "source": { "type": "string" },
+    "source_url": { "type": "string" },
+    "fetched_at": { "type": "string", "format": "date-time" }
+  }
+}
