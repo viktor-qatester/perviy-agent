@@ -35,7 +35,7 @@ class Source(Protocol):
 
 MVP: `manual_feed.py` — JSON/CSV с событиями, которые вы добавляете вручную или полуавтоматом.
 
-Позже: RSS (dev.by, community channels), парсинг страниц митапов.
+Позже: RSS (профильные IT-сообщества, community channels), парсинг страниц митапов.
 
 ### 2. Collector Agent (`src/agents/collector.py`)
 

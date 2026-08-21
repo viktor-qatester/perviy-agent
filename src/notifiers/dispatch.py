@@ -4,12 +4,19 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from src.bot.state import BotState
 from src.config import Settings
 from src.notifiers.email import send_email
-from src.notifiers.telegram import send_telegram_message
+from src.notifiers.telegram import send_telegram_hitl_draft, send_telegram_message
 
 
-def deliver_digest(settings: Settings, digest: str, *, dry_run: bool) -> dict[str, str | None]:
+def deliver_digest(
+    settings: Settings,
+    digest: str,
+    *,
+    dry_run: bool,
+    hitl: bool = False,
+) -> dict[str, str | None]:
     """Send digest via email and/or Telegram. Returns per-channel status."""
     title = _digest_subject()
     body = f"{title}\n\n{digest}"
@@ -18,6 +25,8 @@ def deliver_digest(settings: Settings, digest: str, *, dry_run: bool) -> dict[st
     if dry_run:
         print(f"=== {title} ===")
         print(digest)
+        if hitl:
+            print("[HITL] Кнопки ✅/✏️/❌ будут в Telegram при --send.")
         print("[DRY RUN] Email/Telegram не отправлены.")
         return results
 
@@ -44,11 +53,22 @@ def deliver_digest(settings: Settings, digest: str, *, dry_run: bool) -> dict[st
 
     if "telegram" in channels:
         try:
-            send_telegram_message(
-                token=settings.telegram_bot_token,
-                chat_id=settings.telegram_chat_id,
-                text=body,
-            )
+            if hitl:
+                send_telegram_hitl_draft(
+                    token=settings.telegram_bot_token,
+                    chat_id=settings.telegram_chat_id,
+                    title=title,
+                    digest=digest,
+                )
+                state = BotState.load(settings.bot_state_file)
+                state.set_pending(digest)
+                state.save(settings.bot_state_file)
+            else:
+                send_telegram_message(
+                    token=settings.telegram_bot_token,
+                    chat_id=settings.telegram_chat_id,
+                    text=body,
+                )
             results["telegram"] = "ok"
             print("Telegram отправлен.")
         except Exception as exc:  # noqa: BLE001

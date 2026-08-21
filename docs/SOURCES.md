@@ -4,6 +4,12 @@ MVP начинаем с **ручного feed** — потом подключа�
 
 ---
 
+## Правило безопасности (обязательно)
+
+**СТРОГИЙ ЗАПРЕТ БЕЗОПАСНОСТИ:** Никогда и ни при каких условиях не добавлять, не парсить, не упоминать и не генерировать ссылки/названия доменов dev[.]by, devby[.]io и связанных с ними Telegram-ресурсов. Использовать для вакансий и стажировок исключительно нейтральные платформы (rabota.by, Habr Career, LinkedIn).
+
+---
+
 ## Фаза 0 — Manual feed (сейчас)
 
 Файл `data/manual_events.json` — вы или агент добавляете события вручную.
@@ -20,9 +26,10 @@ MVP начинаем с **ручного feed** — потом подключа�
 
 | Источник | Тип | Комментарий |
 |----------|-----|-------------|
-| [dev.by](https://dev.by) | RSS / раздел jobs | IT-новости и вакансии |
+| [rabota.by](https://rabota.by/stazhirovki) | Web / поиск | стажировки QA Trainee/Junior (**v0.3 live**) |
 | [jobs.tut.by](https://jobs.tut.by) | поиск «стажировка» | фильтр по ключевым словам |
-| [LinkedIn](https://linkedin.com) | ручной / API | «internship Belarus remote» |
+| [Habr Career](https://career.habr.com) | Web / поиск | QA remote intern/junior (**v0.4 live**) |
+| [LinkedIn](https://linkedin.com) | ручной / email alerts | «internship Belarus remote» |
 | Telegram-каналы HR/IT | RSS через tg или ручной | см. ниже |
 
 ### Митапы / конференции
@@ -32,7 +39,7 @@ MVP начинаем с **ручного feed** — потом подключа�
 | [IT Events BY (community)](https://t.me) | Telegram-каналы (искать вручную) |
 | GDG Minsk, Python Belarus, QA communities | Telegram / Meetup |
 | [Space / ПВТ events](https://park.by) | календари площадок |
-| Habr / dev.by анонсы | RSS |
+| Habr Career / профильные IT-сообщества | RSS, анонсы |
 
 ### Telegram-каналы (активные — v0.1 manual feed)
 
@@ -42,9 +49,9 @@ MVP начинаем с **ручного feed** — потом подключа�
 | **Andersen** | [@andersen_people](https://t.me/andersen_people) | [people.andersenlab.com](https://people.andersenlab.com/meetups-with-andersen-recaps) |
 | **IT-Academy** | [@it_academy_by](https://t.me/it_academy_by) | [it-academy.by/media/sobytiya](https://www.it-academy.by/media/sobytiya/) |
 | **Minsk Python** | [@minsk_python](https://t.me/minsk_python), [@minsk_python_jobs](https://t.me/minsk_python_jobs) | [minskpython.github.io](https://minskpython.github.io/) |
-| **Belarus: хочу в IT** | [@belarusitwant](https://t.me/belarusitwant) | — |
+| **Belarus: хочу в IT** | [@belarusitwant](https://t.me/belarusitwant) | — (v0.3: live RSS) |
 
-> dev.by / jobs.devby.io — опционально, если сайт доступен. Для заблокированных регионов: rabota.by + Telegram.
+> Для вакансий и стажировок: rabota.by, Habr Career, LinkedIn (email alerts). Telegram-каналы — для митапов и анонсов сообществ.
 
 ### Telegram-каналы (примеры направлений — уточнять актуальные)
 

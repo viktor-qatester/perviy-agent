@@ -1,11 +1,20 @@
-"""Support-style FAQ over events (no LLM in v0.1 — keyword routing)."""
+"""Support-style FAQ over events (LLM + guardrails, keyword fallback)."""
 
 from __future__ import annotations
 
-from src.models import Event, within_days
+import json
+import logging
+
+from src.config import settings
+from src.llm.client import LLMError, events_to_json, get_llm_client
+from src.llm.guardrails import check_support_answer
+from src.llm.prompts import SUPPORT_SYSTEM
+from src.models import Event, format_event_date, within_days
+
+logger = logging.getLogger(__name__)
 
 
-def answer(question: str, events: list[Event], days: int = 7) -> str:
+def _keyword_answer(question: str, events: list[Event], days: int = 7) -> str:
     q = question.lower().strip()
 
     if not any(k in q for k in ("митап", "meetup", "стажир", "intern", "конферен", "событ")):
@@ -37,7 +46,7 @@ def answer(question: str, events: list[Event], days: int = 7) -> str:
 
     lines = ["Вот что нашёл (только из базы событий):", ""]
     for event in filtered[:10]:
-        date_str = event.date or "дата уточняется"
+        date_str = format_event_date(event)
         lines.append(f"• {event.title} — {date_str}")
         lines.append(f"  {event.url}")
 
@@ -45,3 +54,32 @@ def answer(question: str, events: list[Event], days: int = 7) -> str:
         lines.append(f"\n…и ещё {len(filtered) - 10} событий.")
 
     return "\n".join(lines)
+
+
+def _llm_answer(question: str, events: list[Event]) -> str:
+    client = get_llm_client(settings)
+    if client is None:
+        raise LLMError("LLM not configured")
+
+    payload = json.dumps(
+        {"question": question, "events": json.loads(events_to_json(events))},
+        ensure_ascii=False,
+        indent=2,
+    )
+    return client.complete(SUPPORT_SYSTEM, payload)
+
+
+def answer(question: str, events: list[Event], days: int = 7) -> str:
+    client = get_llm_client(settings)
+
+    try:
+        draft = _llm_answer(question, events)
+        guard = check_support_answer(client, draft, events)
+        if guard.safe:
+            return draft
+
+        logger.warning("Support guardrail blocked LLM answer: %s", guard.reason)
+    except LLMError as exc:
+        logger.warning("Support LLM fallback: %s", exc)
+
+    return _keyword_answer(question, events, days=days)

@@ -26,19 +26,6 @@
     "fetched_at": "2026-07-31T13:00:00+03:00"
   },
   {
-    "id": "tg-jobsdevbybot",
-    "type": "internship",
-    "title": "Jobs-бот — подборка IT-вакансий в Telegram",
-    "date": "2026-07-31",
-    "date_end": null,
-    "location": "online",
-    "tags": ["internship", "junior", "remote", "telegram"],
-    "url": "https://t.me/jobsdevbybot",
-    "source": "manual_feed",
-    "source_url": "https://t.me/jobsdevbybot",
-    "fetched_at": "2026-07-31T13:00:00+03:00"
-  },
-  {
     "id": "tg-belarus-it-want",
     "type": "internship",
     "title": "Belarus: хочу в IT — стажировки, курсы, вакансии",

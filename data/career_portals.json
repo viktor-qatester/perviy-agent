@@ -1,0 +1,35 @@
+{
+  "Tech-гиганты": [
+    {"name": "Yandex", "url": "https://yandex.ru/yaintern/internship"},
+    {"name": "Sber", "url": "https://sberstudent.ru/internship/"},
+    {"name": "Т Банк", "url": "https://education.tbank.ru/start/"},
+    {"name": "VK", "url": "https://internship.vk.company/midsprint/"}
+  ],
+  "E-commerce и маркетплейсы": [
+    {"name": "WB", "url": "https://career.rwb.ru/intern"},
+    {"name": "Авито", "url": "https://start.avito.ru/"},
+    {"name": "Ozon", "url": "https://ozon.tech/vacancies/?levels=Intern"}
+  ],
+  "Телеком и инфраструктура": [
+    {"name": "МТС", "url": "https://job.mts.ru/programs/start"},
+    {"name": "Теле2", "url": "https://intern.t2.ru/"},
+    {"name": "Билайн", "url": "https://job.beeline.ru/internship"},
+    {"name": "Ростелеком", "url": "https://first.rt.ru/"}
+  ],
+  "Банки и финтех": [
+    {"name": "ПСБ", "url": "https://www.psbank.ru/bank/stazhirovka"},
+    {"name": "Газпромбанк", "url": "https://www.gazprombank.tech/digital/gpb-experience/"},
+    {"name": "Райффайзен банк", "url": "https://career.raiffeisen.ru/start"}
+  ],
+  "IT-компании": [
+    {"name": "Контур", "url": "https://kontur.ru/education/internship"},
+    {"name": "IBS x Технодром", "url": "https://technodrom.ru/catalog/internship/"},
+    {"name": "Selectel", "url": "https://selectel.ru/careers/internships/"},
+    {"name": "Skoltech", "url": "https://internship.skoltech.ru/"},
+    {"name": "Т1 Иннотех", "url": "https://career.t1.ru/debut/internship"},
+    {"name": "YADRO", "url": "https://careers.yadro.com/internship"},
+    {"name": "Innostage", "url": "https://innostage-group.ru/internship/"},
+    {"name": "БФТ-Холдинг", "url": "https://bft.ru/start"},
+    {"name": "Софтлайн", "url": "https://softline.ru/about/vacancies/16364"}
+  ]
+}
