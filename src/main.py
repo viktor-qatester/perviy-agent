@@ -67,6 +67,7 @@ def run_pipeline(*, dry_run: bool) -> int:
     print(f"Сохранено событий: {len(events)} -> {settings.events_file}")
     print(
         f"Сбор: +{stats.added} новых, "
+        f"обновлено {stats.refreshed}, "
         f"дублей пропущено {stats.skipped_duplicate}, "
         f"из базы оставлено {stats.kept_existing}"
     )

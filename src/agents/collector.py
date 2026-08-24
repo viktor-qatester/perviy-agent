@@ -14,6 +14,7 @@ from src.sources.base import Source
 @dataclass
 class CollectStats:
     added: int = 0
+    refreshed: int = 0
     skipped_duplicate: int = 0
     skipped_past: int = 0
     kept_existing: int = 0
@@ -22,6 +23,7 @@ class CollectStats:
     def to_dict(self) -> dict[str, int]:
         return {
             "added": self.added,
+            "refreshed": self.refreshed,
             "skipped_duplicate": self.skipped_duplicate,
             "skipped_past": self.skipped_past,
             "kept_existing": self.kept_existing,
@@ -73,7 +75,18 @@ def collect(
                 url_key = normalize_url(event.url)
                 key = dedupe_key(event)
 
-                if url_key in by_url or key in seen_keys:
+                if url_key in by_url:
+                    # Listing is still live: replace the stored copy so fetched_at,
+                    # title, and dates stay current. Otherwise digest filters that
+                    # use recently_fetched() drop still-open vacancies after N days.
+                    old = by_url[url_key]
+                    seen_keys.discard(dedupe_key(old))
+                    by_url[url_key] = event
+                    seen_keys.add(key)
+                    stats.refreshed += 1
+                    continue
+
+                if key in seen_keys:
                     stats.skipped_duplicate += 1
                     continue
 
