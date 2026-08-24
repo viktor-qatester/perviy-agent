@@ -16,12 +16,7 @@ from src.bot import pipeline
 from src.bot.career_portals import build_internships_message, is_internships_request
 from src.bot.state import BotState
 from src.config import Settings
-from src.notifiers.telegram import (
-    HITL_CALLBACK_APPROVE,
-    HITL_CALLBACK_CANCEL,
-    HITL_CALLBACK_EDIT,
-    _split_text,
-)
+from src.notifiers.telegram import hitl_callback_data, parse_hitl_callback, _split_text
 from src.sources.factory import build_sources
 
 logger = logging.getLogger(__name__)
@@ -57,13 +52,13 @@ async def _reject_unauthorized(update: Update) -> None:
         await update.effective_message.reply_text("Доступ запрещён.")
 
 
-def _hitl_keyboard() -> InlineKeyboardMarkup:
+def _hitl_keyboard(nonce: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Опубликовать", callback_data=HITL_CALLBACK_APPROVE),
-                InlineKeyboardButton("✏️ Править", callback_data=HITL_CALLBACK_EDIT),
-                InlineKeyboardButton("❌ Отмена", callback_data=HITL_CALLBACK_CANCEL),
+                InlineKeyboardButton("✅ Опубликовать", callback_data=hitl_callback_data("approve", nonce)),
+                InlineKeyboardButton("✏️ Править", callback_data=hitl_callback_data("edit", nonce)),
+                InlineKeyboardButton("❌ Отмена", callback_data=hitl_callback_data("cancel", nonce)),
             ]
         ]
     )
@@ -104,6 +99,8 @@ def _format_digest_header(
 ) -> str:
     prefix = "📅 Автоматический черновик дайджеста" if scheduled else "Черновик дайджеста"
     header = f"{prefix} ({count} событий, +{stats.added} новых)"
+    if stats.refreshed:
+        header += f", обновлено: {stats.refreshed}"
     if stats.skipped_duplicate:
         header += f", дублей пропущено: {stats.skipped_duplicate}"
     if errors:
@@ -122,7 +119,7 @@ async def send_digest_draft(
     digest, count, errors, stats = pipeline.run_collect_and_digest(settings)
 
     state = _load_state(settings)
-    state.set_pending(digest)
+    nonce = state.set_pending(digest)
     _save_state(settings, state)
 
     header = _format_digest_header(count, stats, errors, scheduled=scheduled)
@@ -132,7 +129,7 @@ async def send_digest_draft(
         await bot.send_message(
             chat_id=chat_id,
             text=chunk,
-            reply_markup=_hitl_keyboard() if index == len(chunks) - 1 else None,
+            reply_markup=_hitl_keyboard(nonce) if index == len(chunks) - 1 else None,
             disable_web_page_preview=True,
         )
 
@@ -210,11 +207,11 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     state = _load_state(settings)
     if state.mode == "edit":
-        state.set_pending(text)
+        nonce = state.set_pending(text)
         _save_state(settings, state)
         await update.message.reply_text(
             "Черновик обновлён. Проверьте и выберите действие:",
-            reply_markup=_hitl_keyboard(),
+            reply_markup=_hitl_keyboard(nonce),
         )
         return
 
@@ -246,6 +243,13 @@ async def _publish_digest_to_channel(
         )
 
 
+async def _reply_callback(query, text: str) -> None:
+    if query.message is None:
+        logger.warning("Callback has no message; cannot reply: %s", text)
+        return
+    await query.message.reply_text(text)
+
+
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings: Settings = context.bot_data["settings"]
     query = update.callback_query
@@ -257,30 +261,43 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     await query.answer()
+    parsed = parse_hitl_callback(query.data or "")
+    if parsed is None:
+        logger.warning("Unknown callback: %s", query.data)
+        return
+
+    action, nonce = parsed
     state = _load_state(settings)
-    action = query.data or ""
 
-    if action == HITL_CALLBACK_CANCEL:
-        state.clear_pending()
-        _save_state(settings, state)
-        await query.edit_message_reply_markup(reply_markup=None)
-        await query.message.reply_text("Черновик отменён.")
-        return
-
-    if not state.pending_digest:
-        await query.message.reply_text("Нет активного черновика. Нажмите /digest.")
-        return
-
-    if action == HITL_CALLBACK_EDIT:
-        state.start_edit()
-        _save_state(settings, state)
-        await query.message.reply_text(
-            "Отправьте новый текст черновика одним сообщением.\n"
-            "Или /digest — собрать заново из базы."
+    if not state.matches_hitl_nonce(nonce):
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            logger.debug("Could not remove stale HITL keyboard", exc_info=True)
+        await _reply_callback(
+            query,
+            "Это кнопки от старого черновика. Используйте последнее сообщение или /digest.",
         )
         return
 
-    if action == HITL_CALLBACK_APPROVE:
+    if action == "cancel":
+        state.clear_pending()
+        _save_state(settings, state)
+        await query.edit_message_reply_markup(reply_markup=None)
+        await _reply_callback(query, "Черновик отменён.")
+        return
+
+    if action == "edit":
+        state.start_edit()
+        _save_state(settings, state)
+        await _reply_callback(
+            query,
+            "Отправьте новый текст черновика одним сообщением.\n"
+            "Или /digest — собрать заново из базы.",
+        )
+        return
+
+    if action == "approve":
         digest_text = state.pending_digest
         log_path = _write_approval_log(settings, digest_text)
         state.clear_pending()
@@ -297,18 +314,20 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 )
             except Exception as exc:
                 logger.exception("Channel publish failed")
-                await query.message.reply_text(
-                    f"Черновик сохранён ({log_path.name}), но публикация в канал не удалась:\n{exc}"
+                await _reply_callback(
+                    query,
+                    f"Черновик сохранён ({log_path.name}), но публикация в канал не удалась:\n{exc}",
                 )
                 return
-            await query.message.reply_text("✅ Черновик одобрен и опубликован в канал!")
+            await _reply_callback(query, "✅ Черновик одобрен и опубликован в канал!")
             return
 
-        await query.message.reply_text(
+        await _reply_callback(
+            query,
             f"✅ Черновик одобрен и сохранён.\n"
             f"Лог: {log_path.name}\n\n"
-            "Задайте TELEGRAM_CHANNEL_ID для публикации в канал."
+            "Задайте TELEGRAM_CHANNEL_ID для публикации в канал.",
         )
         return
 
-    logger.warning("Unknown callback: %s", action)
+    logger.warning("Unknown HITL action: %s", action)

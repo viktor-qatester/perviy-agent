@@ -54,15 +54,16 @@ def deliver_digest(
     if "telegram" in channels:
         try:
             if hitl:
+                state = BotState.load(settings.bot_state_file)
+                nonce = state.set_pending(digest)
+                state.save(settings.bot_state_file)
                 send_telegram_hitl_draft(
                     token=settings.telegram_bot_token,
                     chat_id=settings.telegram_chat_id,
                     title=title,
                     digest=digest,
+                    nonce=nonce,
                 )
-                state = BotState.load(settings.bot_state_file)
-                state.set_pending(digest)
-                state.save(settings.bot_state_file)
             else:
                 send_telegram_message(
                     token=settings.telegram_bot_token,
