@@ -127,3 +127,13 @@ def recently_fetched(event: Event, days: int, today: date | None = None) -> bool
         return False
     age = (today - fetched_day).days
     return 0 <= age <= days
+
+
+def in_digest_window(event: Event, days: int, today: date | None = None) -> bool:
+    """True if the event belongs in a digest or «this week» support answer."""
+    return (
+        within_days(event, days, today)
+        or (is_telegram_rss(event) and recently_published(event, days, today))
+        or (is_rabota_by(event) and recently_fetched(event, days, today))
+        or (is_habr_career(event) and recently_fetched(event, days, today))
+    )
