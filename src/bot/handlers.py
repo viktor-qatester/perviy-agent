@@ -246,6 +246,14 @@ async def _publish_digest_to_channel(
         )
 
 
+async def _try_remove_hitl_keyboard(query) -> None:
+    """Drop HITL buttons if possible. Must not abort approve/cancel."""
+    try:
+        await query.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        logger.warning("Could not remove HITL keyboard", exc_info=True)
+
+
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings: Settings = context.bot_data["settings"]
     query = update.callback_query
@@ -263,7 +271,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if action == HITL_CALLBACK_CANCEL:
         state.clear_pending()
         _save_state(settings, state)
-        await query.edit_message_reply_markup(reply_markup=None)
+        await _try_remove_hitl_keyboard(query)
         await query.message.reply_text("Черновик отменён.")
         return
 
@@ -285,7 +293,10 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         log_path = _write_approval_log(settings, digest_text)
         state.clear_pending()
         _save_state(settings, state)
-        await query.edit_message_reply_markup(reply_markup=None)
+        # Keyboard edit is cosmetic. Telegram can refuse it (deleted message,
+        # missing edit rights on a channel, transient API error). Pending is
+        # already cleared — aborting here would drop the approved digest.
+        await _try_remove_hitl_keyboard(query)
 
         channel_id = settings.publish_channel_id()
         if channel_id:
