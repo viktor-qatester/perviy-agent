@@ -15,23 +15,31 @@ _USER_AGENT = "PerviyAgent/0.4 (personal monitoring; +local)"
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
 
+# «тестиров» is a stem (тестировщик, тестированию). A trailing \b after the
+# group made those Russian titles miss entirely.
 _QA_TITLE_RE = re.compile(
-    r"\b("
-    r"qa|"
+    r"(?i)(?:"
+    r"\bqa\b|"
     r"quality assurance|"
     r"software tester|"
     r"test engineer|"
-    r"sdet|"
+    r"\bsdet\b|"
     r"тестиров|"
     r"manual test|"
     r"automation test"
-    r")\b",
-    re.IGNORECASE,
+    r")"
 )
 
 _JUNIOR_RE = re.compile(
-    r"\b(trainee|junior|intern|стажир|стаж[ёe]р|pre-trainee|beginner|начинающ)\b",
-    re.IGNORECASE,
+    r"(?i)(?:"
+    r"\btrainee\b|"
+    r"\bjunior\b|"
+    r"\bintern\b|"
+    r"стаж[иеё]р|"  # стажер, стажёр, стажировка
+    r"\bpre-trainee\b|"
+    r"\bbeginner\b|"
+    r"начинающ"
+    r")"
 )
 
 _SENIOR_RE = re.compile(
