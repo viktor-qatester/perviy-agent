@@ -39,6 +39,12 @@ _SENIOR_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Habr puts the level in a grade chip. qualification=intern|junior query params
+# currently still return Middle/Senior/Lead cards (verified against live HTML).
+_JUNIOR_GRADES = frozenset({"intern", "junior", "trainee", "стажёр", "стажер"})
+_EXPERIENCED_GRADES = frozenset({"middle", "senior", "lead", "principal", "staff"})
+_CARD_CHUNK_LIMIT = 8000
+
 
 @dataclass(frozen=True)
 class _VacancyCard:
@@ -47,6 +53,7 @@ class _VacancyCard:
     url: str
     company: str
     published_date: str | None
+    grade: str | None
 
 
 class HabrCareerQaSource:
@@ -71,7 +78,11 @@ class HabrCareerQaSource:
             for card in _parse_cards(html):
                 if card.vacancy_id in seen_ids:
                     continue
-                if not _matches_qa_junior(card.title, require_junior_hint=require_junior_hint):
+                if not _matches_qa_junior(
+                    card.title,
+                    require_junior_hint=require_junior_hint,
+                    grade=card.grade,
+                ):
                     continue
                 seen_ids.add(card.vacancy_id)
                 events.append(_to_event(card, fetched_at=now))
@@ -102,6 +113,15 @@ class HabrCareerQaSource:
             raise RuntimeError(f"career.habr.com unavailable: {exc.reason}") from exc
 
 
+def _card_chunk(html: str, start: int) -> str:
+    """Slice one vacancy card. Grade chips sit after company/rating markup."""
+    next_card = html.find('class="vacancy-card"', start + 1)
+    end = start + _CARD_CHUNK_LIMIT
+    if next_card != -1:
+        end = min(end, next_card)
+    return html[start:end]
+
+
 def _parse_cards(html: str) -> list[_VacancyCard]:
     cards: dict[str, _VacancyCard] = {}
 
@@ -112,13 +132,14 @@ def _parse_cards(html: str) -> list[_VacancyCard]:
         vacancy_id = match.group(2)
         if vacancy_id in cards:
             continue
-        chunk = html[match.start() : match.start() + 2000]
+        chunk = _card_chunk(html, match.start())
         cards[vacancy_id] = _VacancyCard(
             vacancy_id=vacancy_id,
             title=_WS_RE.sub(" ", match.group(1)).strip(),
             url=f"https://career.habr.com/vacancies/{vacancy_id}",
             company=_extract_company(chunk),
             published_date=_extract_published_date(chunk),
+            grade=_extract_grade(chunk),
         )
 
     return list(cards.values())
@@ -142,14 +163,39 @@ def _extract_published_date(chunk: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _matches_qa_junior(title: str, *, require_junior_hint: bool) -> bool:
+def _extract_grade(chunk: str) -> str | None:
+    match = re.search(
+        r'svg-icon--icon-grade.*?<div class="chip-with-icon__text">([^<]+)',
+        chunk,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if not match:
+        return None
+    grade = _WS_RE.sub(" ", match.group(1)).strip()
+    return grade or None
+
+
+def _matches_qa_junior(
+    title: str,
+    *,
+    require_junior_hint: bool,
+    grade: str | None = None,
+) -> bool:
     if not _QA_TITLE_RE.search(title):
         return False
+
+    grade_key = (grade or "").strip().lower()
+    if grade_key in _EXPERIENCED_GRADES:
+        return False
+    if grade_key in _JUNIOR_GRADES:
+        return True
+
     if _SENIOR_RE.search(title) and not _JUNIOR_RE.search(title):
         return False
-    if require_junior_hint:
-        return bool(_JUNIOR_RE.search(title))
-    return True
+    # qualification=intern|junior URLs still list mixed levels. A missing grade
+    # chip is not a junior signal — require intern/junior in the title too.
+    _ = require_junior_hint
+    return bool(_JUNIOR_RE.search(title))
 
 
 def _to_event(card: _VacancyCard, *, fetched_at: str) -> Event:
