@@ -72,7 +72,19 @@ def run_pipeline(*, dry_run: bool) -> int:
     )
     print(f"Лог прогона: {log_path}")
     if errors:
-        print("Ошибки источников:", errors)
+        print(
+            "Предупреждение: часть источников недоступна, "
+            "дайджест собран из остальных:",
+            errors,
+        )
+
+    failed = [
+        name
+        for name, status in notify_results.items()
+        if status not in (None, "ok", "skipped")
+    ]
+    if failed:
+        print("Не все каналы сработали:", notify_results)
         return 1
     return 0
 
@@ -80,7 +92,7 @@ def run_pipeline(*, dry_run: bool) -> int:
 def test_notify() -> int:
     sample = (
         "Тестовое сообщение от Первого Агента.\n\n"
-        "Если вы видите это письмо или сообщение в Telegram — "
+        "Если вы видите это сообщение в Telegram — "
         "уведомления настроены правильно."
     )
     results = deliver_digest(settings, sample, dry_run=False)

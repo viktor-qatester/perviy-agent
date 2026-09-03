@@ -1,9 +1,12 @@
-name: Daily IT digest
+name: IT digest
+
+# Отчёт мониторинга — только Telegram (TELEGRAM_CHAT_ID).
+# Нужны GitHub Secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
 on:
   schedule:
-    # 05:00 Europe/Minsk (UTC+3) = 02:00 UTC
-    - cron: "0 2 * * *"
+    # 05:00 Europe/Minsk (UTC+3) = 02:00 UTC, Monday and Friday
+    - cron: "0 2 * * 1,5"
   workflow_dispatch:
 
 jobs:
@@ -25,16 +28,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run agent and send email
+      - name: Collect and send Telegram report
         env:
-          NOTIFY_VIA: email
+          NOTIFY_VIA: telegram
           DRY_RUN: "false"
           DIGEST_DAYS_AHEAD: "7"
-          SMTP_HOST: smtp.gmail.com
-          SMTP_PORT: "587"
-          SMTP_USE_TLS: "true"
-          EMAIL_USER: ${{ secrets.EMAIL_USER }}
-          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
-          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python src/main.py --send
