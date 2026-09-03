@@ -24,12 +24,12 @@ class Settings:
     dry_run: bool = os.getenv("DRY_RUN", "true").lower() == "true"
     digest_days_ahead: int = int(os.getenv("DIGEST_DAYS_AHEAD", "7"))
 
-    # Notifications: email, telegram или email,telegram
-    notify_via: str = os.getenv("NOTIFY_VIA", "email,telegram")
+    # Notifications: telegram (по умолчанию). email — только если явно задать.
+    notify_via: str = os.getenv("NOTIFY_VIA", "telegram")
 
-    # Autonomous schedule (v0.4 — bot JobQueue)
+    # Autonomous schedule (v0.4 — bot JobQueue; основной cron — GitHub Actions)
     schedule_enabled: bool = os.getenv("SCHEDULE_ENABLED", "false").lower() == "true"
-    schedule_days: str = os.getenv("SCHEDULE_DAYS", "tue,fri")
+    schedule_days: str = os.getenv("SCHEDULE_DAYS", "mon,fri")
     schedule_time: str = (
         os.getenv("SCHEDULE_TIME")
         or os.getenv("SCHEDULE_RUN_TIME")
