@@ -49,7 +49,7 @@ class Settings:
     email_from: str = os.getenv("EMAIL_FROM", "")
     email_to: str = os.getenv("EMAIL_TO", "")
 
-    telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     # Личный чат: команды бота, черновик дайджеста, HITL-кнопки
     telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     # Публичный канал: публикация одобренного дайджеста (✅)
