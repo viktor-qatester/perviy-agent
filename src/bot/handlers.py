@@ -21,6 +21,7 @@ from src.notifiers.telegram import (
     HITL_CALLBACK_CANCEL,
     HITL_CALLBACK_EDIT,
     _split_text,
+    recover_digest_from_hitl_message_text,
 )
 from src.sources.factory import build_sources
 
@@ -266,6 +267,16 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text("Черновик отменён.")
         return
+
+    if not state.pending_digest:
+        # CI `--send` stores pending digest on the GitHub runner, which is gone
+        # by the time the bot handles ✅. Recover from the clicked message when
+        # it is a complete single-chunk draft (header still present).
+        message_text = getattr(query.message, "text", None) if query.message else None
+        recovered = recover_digest_from_hitl_message_text(message_text)
+        if recovered:
+            state.set_pending(recovered)
+            _save_state(settings, state)
 
     if not state.pending_digest:
         await query.message.reply_text("Нет активного черновика. Нажмите /digest.")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -11,6 +12,15 @@ from typing import Any
 HITL_CALLBACK_APPROVE = "hitl:approve"
 HITL_CALLBACK_EDIT = "hitl:edit"
 HITL_CALLBACK_CANCEL = "hitl:cancel"
+
+# CLI `--send` / GitHub Actions wraps the digest in this subject line.
+_CLI_HITL_SUBJECT_RE = re.compile(
+    r"^IT-события BY — \d{2}\.\d{2}\.\d{4}\s*\n+",
+)
+# Bot `/digest` and scheduled drafts start with this header, then a blank line.
+_BOT_HITL_HEADER_RE = re.compile(
+    r"^(?:📅 Автоматический черновик дайджеста|Черновик дайджеста)\b",
+)
 
 HITL_KEYBOARD: list[list[dict[str, str]]] = [
     [
@@ -27,6 +37,37 @@ def send_telegram_message(*, token: str, chat_id: str, text: str) -> None:
 
     for chunk in _split_text(text, limit=4000):
         _post_message(token=token, chat_id=chat_id, text=chunk)
+
+
+def recover_digest_from_hitl_message_text(text: str | None) -> str | None:
+    """Return the digest body from a HITL draft message, or None if unsafe.
+
+    GitHub Actions ``--send`` writes ``bot_state.json`` on the ephemeral runner,
+    so the long-running bot has no ``pending_digest`` when ✅ is pressed.
+    Recovering from the clicked message makes that path work — but only when
+    the message is a *complete* draft (single Telegram chunk). Continuation
+    chunks from a split send do not start with the known header, so we refuse
+    them instead of publishing a truncated tail.
+    """
+    if not text:
+        return None
+    stripped = text.strip()
+    if not stripped:
+        return None
+
+    cli_match = _CLI_HITL_SUBJECT_RE.match(stripped)
+    if cli_match:
+        body = stripped[cli_match.end() :].strip()
+        return body or None
+
+    if _BOT_HITL_HEADER_RE.match(stripped):
+        parts = stripped.split("\n\n", 1)
+        if len(parts) != 2:
+            return None
+        body = parts[1].strip()
+        return body or None
+
+    return None
 
 
 def send_telegram_hitl_draft(*, token: str, chat_id: str, title: str, digest: str) -> None:
