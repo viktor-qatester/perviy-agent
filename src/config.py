@@ -29,7 +29,7 @@ class Settings:
 
     # Autonomous schedule (bot JobQueue; GitHub Actions handles the default schedule)
     schedule_enabled: bool = os.getenv("SCHEDULE_ENABLED", "false").lower() == "true"
-    schedule_days: str = os.getenv("SCHEDULE_DAYS", "mon,fri")
+    schedule_days: str = os.getenv("SCHEDULE_DAYS", "tue,fri")
     schedule_time: str = (
         os.getenv("SCHEDULE_TIME")
         or os.getenv("SCHEDULE_RUN_TIME")
