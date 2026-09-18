@@ -4,7 +4,7 @@
 Usage:
   python src/main.py --dry-run
   python src/main.py --ask "митапы на этой неделе"
-  python src/main.py --send          # дайджест в Telegram с HITL-кнопками
+  python src/main.py --send          # доставить дайджест напрямую в Telegram
   python src/main.py --test-notify   # тест уведомлений без сбора данных
   python src/main.py --bot           # интерактивный Telegram-бот (v0.2)
   python src/main.py --dry-run       # сбор manual + RSS, без отправки
@@ -49,7 +49,7 @@ def run_pipeline(*, dry_run: bool) -> int:
     save_events(settings.events_file, events)
     digest = build_digest(events, days=settings.digest_days_ahead)
 
-    notify_results = deliver_digest(settings, digest, dry_run=dry_run, hitl=not dry_run)
+    notify_results = deliver_digest(settings, digest, dry_run=dry_run)
 
     log_path = write_run_log(
         {
