@@ -27,9 +27,9 @@ class Settings:
     # Notifications: telegram (по умолчанию). email — только если явно задать.
     notify_via: str = os.getenv("NOTIFY_VIA", "telegram")
 
-    # Autonomous schedule (v0.4 — bot JobQueue; основной cron — GitHub Actions)
+    # Autonomous schedule (bot JobQueue; GitHub Actions handles the default schedule)
     schedule_enabled: bool = os.getenv("SCHEDULE_ENABLED", "false").lower() == "true"
-    schedule_days: str = os.getenv("SCHEDULE_DAYS", "mon,fri")
+    schedule_days: str = os.getenv("SCHEDULE_DAYS", "tue,fri")
     schedule_time: str = (
         os.getenv("SCHEDULE_TIME")
         or os.getenv("SCHEDULE_RUN_TIME")
@@ -38,7 +38,7 @@ class Settings:
     timezone: str = (
         os.getenv("TIMEZONE")
         or os.getenv("SCHEDULE_TIMEZONE")
-        or "Europe/Moscow"
+        or "Europe/Minsk"
     )
 
     smtp_host: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
