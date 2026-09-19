@@ -71,27 +71,54 @@ def _post_message(
         raise RuntimeError(f"Telegram API rejected message: {data}")
 
 
+def _telegram_len(text: str) -> int:
+    """Telegram message length is UTF-16 code units, not Python code points."""
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _append_chunk(parts: list[str], chunk: str) -> None:
+    stripped = chunk.rstrip()
+    if stripped:
+        parts.append(stripped)
+
+
+def _chunks_by_telegram_len(text: str, limit: int) -> list[str]:
+    """Slice `text` so each piece is at most `limit` UTF-16 code units."""
+    parts: list[str] = []
+    start = 0
+    used = 0
+    for index, char in enumerate(text):
+        units = 2 if ord(char) > 0xFFFF else 1
+        if used + units > limit:
+            _append_chunk(parts, text[start:index])
+            start = index
+            used = units
+        else:
+            used += units
+    _append_chunk(parts, text[start:])
+    return parts
+
+
 def _split_text(text: str, limit: int) -> list[str]:
-    if len(text) <= limit:
+    if _telegram_len(text) <= limit:
         return [text]
     parts: list[str] = []
     current = ""
     for line in text.splitlines(keepends=True):
-        if len(line) > limit:
+        if _telegram_len(line) > limit:
             if current:
-                parts.append(current.rstrip())
+                _append_chunk(parts, current)
                 current = ""
-            for i in range(0, len(line), limit):
-                parts.append(line[i : i + limit].rstrip())
+            parts.extend(_chunks_by_telegram_len(line, limit))
             continue
-        if len(current) + len(line) > limit:
-            parts.append(current.rstrip())
+        if _telegram_len(current) + _telegram_len(line) > limit:
+            _append_chunk(parts, current)
             current = line
         else:
             current += line
     if current.strip():
-        parts.append(current.rstrip())
-    return parts or [text[:limit]]
+        _append_chunk(parts, current)
+    return parts or _chunks_by_telegram_len(text, limit) or [""]
 
 
 def send_draft(title: str, body: str, *, dry_run: bool = True) -> None:
