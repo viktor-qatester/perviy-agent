@@ -113,6 +113,28 @@ def _format_digest_header(
     return header
 
 
+_PARTIAL_PUBLISH_PROMPT = (
+    "Предыдущий дайджест опубликован частично. "
+    "Нажмите ✅, чтобы доотправить оставшиеся части, "
+    "прежде чем собирать новый."
+)
+
+
+async def _prompt_if_partial_publish(bot, chat_id: str, state: BotState) -> bool:
+    """Re-attach HITL buttons when a digest is mid-publish. True if blocked."""
+    if not state.published_chunks:
+        return False
+    if state.draft_id and state.pending_digest:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=_PARTIAL_PUBLISH_PROMPT,
+            reply_markup=_hitl_keyboard(state.draft_id),
+            disable_web_page_preview=True,
+        )
+        return True
+    return False
+
+
 async def send_digest_draft(
     bot,
     chat_id: str,
@@ -121,12 +143,24 @@ async def send_digest_draft(
     scheduled: bool = False,
 ) -> None:
     """Collect events, build digest, send HITL draft to admin chat."""
+    async with _state_lock:
+        state = _load_state(settings)
+        if await _prompt_if_partial_publish(bot, chat_id, state):
+            return
+        if state.published_chunks:
+            # Progress flag without a recoverable draft — do not wedge /digest.
+            state.clear_pending()
+            _save_state(settings, state)
+
     digest, count, errors, stats = pipeline.run_collect_and_digest(settings)
 
     async with _state_lock:
         state = _load_state(settings)
+        if await _prompt_if_partial_publish(bot, chat_id, state):
+            return
         if state.published_chunks:
-            raise RuntimeError("Previous digest was partly published; retry approval first")
+            state.clear_pending()
+            _save_state(settings, state)
         state.set_pending(digest)
         _save_state(settings, state)
 
@@ -180,6 +214,11 @@ async def cmd_digest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not _authorized(update, settings):
         await _reject_unauthorized(update)
         return
+
+    async with _state_lock:
+        state = _load_state(settings)
+        if await _prompt_if_partial_publish(context.bot, str(update.effective_chat.id), state):
+            return
 
     await update.message.reply_text("Собираю события…")
     await send_digest_draft(
