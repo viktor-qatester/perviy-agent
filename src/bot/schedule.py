@@ -13,21 +13,23 @@ from src.config import Settings
 
 logger = logging.getLogger(__name__)
 
+# JobQueue.run_daily (python-telegram-bot >=20): Sunday=0, Saturday=6.
+# Do not use datetime.weekday()/APScheduler numbering (Monday=0) here.
 _WEEKDAY_ALIASES: dict[str, int] = {
-    "mon": 0,
-    "monday": 0,
-    "tue": 1,
-    "tuesday": 1,
-    "wed": 2,
-    "wednesday": 2,
-    "thu": 3,
-    "thursday": 3,
-    "fri": 4,
-    "friday": 4,
-    "sat": 5,
-    "saturday": 5,
-    "sun": 6,
-    "sunday": 6,
+    "sun": 0,
+    "sunday": 0,
+    "mon": 1,
+    "monday": 1,
+    "tue": 2,
+    "tuesday": 2,
+    "wed": 3,
+    "wednesday": 3,
+    "thu": 4,
+    "thursday": 4,
+    "fri": 5,
+    "friday": 5,
+    "sat": 6,
+    "saturday": 6,
 }
 
 
