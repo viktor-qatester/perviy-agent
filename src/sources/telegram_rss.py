@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
@@ -12,6 +14,11 @@ from urllib.parse import urlparse
 import feedparser
 
 from src.models import Event
+
+_USER_AGENT = "PerviyAgent/0.4 (personal monitoring; +local)"
+# feedparser.parse(url) uses urllib with no timeout. RSS is collected before
+# rabota.by / Habr Career, so a hung RSSHub mirror blocks the whole digest.
+_FETCH_TIMEOUT_SEC = 45
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
@@ -70,7 +77,8 @@ class TelegramRssSource:
         return []
 
     def _fetch_url(self, url: str) -> list[Event]:
-        parsed = feedparser.parse(url)
+        raw = _download_feed(url)
+        parsed = feedparser.parse(raw)
         if parsed.bozo and not parsed.entries:
             raise RuntimeError(f"RSS parse error: {parsed.bozo_exception}")
 
@@ -83,6 +91,28 @@ class TelegramRssSource:
                 events.append(event)
 
         return events
+
+
+def _download_feed(url: str) -> bytes:
+    """Fetch feed bytes with a hard timeout so a dead mirror cannot hang collect."""
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": _USER_AGENT,
+            "Accept": "application/rss+xml, application/xml, text/xml, */*",
+            "Accept-Encoding": "identity",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=_FETCH_TIMEOUT_SEC) as response:
+            return response.read()
+    except TimeoutError as exc:
+        raise RuntimeError(f"RSS timeout after {_FETCH_TIMEOUT_SEC}s: {url}") from exc
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")[:300]
+        raise RuntimeError(f"RSS HTTP {exc.code}: {body}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"RSS unavailable: {exc.reason}") from exc
 
 
 def _mirror_urls(channel: str, primary: str) -> list[str]:
