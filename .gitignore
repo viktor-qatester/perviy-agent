@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .env
 logs/*.json
+logs/scheduler.log
 data/events.json
 data/bot_state.json
 .DS_Store
