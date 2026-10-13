@@ -12,12 +12,12 @@ from src.bot.schedule import parse_schedule_days, setup_schedule
 
 
 class ScheduleRegressionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_real_jobqueue_fires_only_tuesday_friday_at_five_minsk(self):
+    async def test_real_jobqueue_fires_only_monday_thursday_at_five_minsk(self):
         queue = JobQueue()
         app = SimpleNamespace(job_queue=queue)
         settings = SimpleNamespace(
             schedule_enabled=True,
-            schedule_days="tue,fri",
+            schedule_days="mon,thu",
             schedule_time="05:00",
             timezone="Europe/Minsk",
         )
@@ -32,9 +32,10 @@ class ScheduleRegressionTests(unittest.IsolatedAsyncioTestCase):
             actual.append(previous)
             now = previous + timedelta(seconds=1)
         expected = [datetime(2026, 10, day, 5, 0, tzinfo=tz)
-                    for day in (6, 9, 13, 16, 20, 23)]
+                    for day in (5, 8, 12, 15, 19, 22)]
         self.assertEqual(actual, expected)
-        self.assertTrue(all(d.weekday() in (1, 4) for d in actual))
+        self.assertTrue(all(d.weekday() in (0, 3) for d in actual))
+        self.assertTrue(all(d.utcoffset() == timedelta(hours=3) for d in actual))
 
     async def test_disabled_local_schedule_creates_no_job(self):
         queue = JobQueue()

@@ -14,10 +14,13 @@ from src.notifiers.dispatch import deliver_digest
 
 
 class ScheduleTests(unittest.TestCase):
-    def test_tuesday_and_friday_defaults(self):
-        self.assertEqual(parse_schedule_days(Settings().schedule_days), (2, 5))
+    def test_monday_and_thursday_defaults(self):
+        self.assertEqual(parse_schedule_days(Settings().schedule_days), (1, 4))
+
+    def test_github_actions_has_no_schedule(self):
         workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/daily-digest.yml").read_text(encoding="utf-8")
-        self.assertIn('cron: "0 2 * * 2,5"', workflow)
+        self.assertNotIn("schedule:", workflow)
+        self.assertNotIn("cron:", workflow)
 
 
 class DeliveryTests(unittest.TestCase):
