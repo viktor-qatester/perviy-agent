@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -120,8 +121,14 @@ async def send_digest_draft(
     *,
     scheduled: bool = False,
 ) -> None:
-    """Collect events, build digest, send HITL draft to admin chat."""
+    """Collect events, build digest, send HITL draft to admin chat.
+
+    Independent of DRY_RUN: the draft always goes to the authorized chat; only
+    approval (button) publishes to the channel.
+    """
+    started = time.monotonic()
     digest, count, errors, stats = pipeline.run_collect_and_digest(settings)
+    collected = time.monotonic()
 
     async with _state_lock:
         state = _load_state(settings)
@@ -140,6 +147,17 @@ async def send_digest_draft(
                 reply_markup=_hitl_keyboard(state.draft_id) if index == len(chunks) - 1 else None,
                 disable_web_page_preview=True,
             )
+
+    # httpx request logs are silenced (they contain the token), so this line is
+    # the evidence that Telegram accepted the draft and how long collection took.
+    logger.info(
+        "Digest draft delivered: scheduled=%s events=%d chunks=%d collect=%.1fs total=%.1fs",
+        scheduled,
+        count,
+        len(chunks),
+        collected - started,
+        time.monotonic() - started,
+    )
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

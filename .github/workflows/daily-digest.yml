@@ -2,11 +2,10 @@ name: IT digest
 
 # Отчёт мониторинга — только Telegram (TELEGRAM_CHAT_ID).
 # Нужны GitHub Secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+# Автоматическая рассылка — только бот на AEZA (пн/чт 05:00 Europe/Minsk).
+# Расписания здесь нет: workflow_dispatch отправляет отчёт только при ручном запуске.
 
 on:
-  schedule:
-    # 05:00 Europe/Minsk (UTC+3) = 02:00 UTC, Tuesday and Friday
-    - cron: "0 2 * * 2,5"
   workflow_dispatch:
   pull_request:
 

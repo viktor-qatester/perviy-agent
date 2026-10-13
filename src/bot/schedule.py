@@ -13,6 +13,8 @@ from src.config import Settings
 
 logger = logging.getLogger(__name__)
 
+MISFIRE_GRACE_SECONDS = 15 * 60
+
 # JobQueue.run_daily (python-telegram-bot >=20): Sunday=0, Saturday=6.
 # Do not use datetime.weekday()/APScheduler numbering (Monday=0) here.
 _WEEKDAY_ALIASES: dict[str, int] = {
@@ -104,6 +106,9 @@ def setup_schedule(app: Application, settings: Settings) -> None:
         time=run_time.replace(tzinfo=tz),
         days=days,
         name="scheduled_digest",
+        # APScheduler default is 1 s: a briefly busy event loop at 05:00 would
+        # silently skip the whole run. Allow up to 15 minutes of lateness.
+        job_kwargs={"misfire_grace_time": MISFIRE_GRACE_SECONDS},
     )
     logger.info(
         "Schedule enabled: %s at %s (%s), days=%s",
