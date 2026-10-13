@@ -14,10 +14,21 @@ from src.config import Settings
 
 logger = logging.getLogger(__name__)
 
-_TOKEN_RE = re.compile(r"\d{5,}:[A-Za-z0-9_-]{20,}")
+# "<id>:<secret>" as in Telegram API URLs; ":" may also appear URL-encoded.
+_TOKEN_RE = re.compile(r"\d{5,}(?::|%3[Aa])[A-Za-z0-9_-]{20,}")
+_MIN_SECRET_LEN = 8
+_known_secrets: set[str] = set()
+
+
+def register_secret(value: str) -> None:
+    """Also redact the exact configured token, whatever its format."""
+    if value and len(value) >= _MIN_SECRET_LEN:
+        _known_secrets.add(value)
 
 
 def redact_token(text: str) -> str:
+    for secret in _known_secrets:
+        text = text.replace(secret, "<redacted>")
     return _TOKEN_RE.sub("<redacted>", text)
 
 
@@ -31,10 +42,14 @@ class TokenRedactingFilter(logging.Filter):
             record.exc_text = logging.Formatter().formatException(record.exc_info)
         if record.exc_text:
             record.exc_text = redact_token(record.exc_text)
+        if record.stack_info:
+            record.stack_info = redact_token(record.stack_info)
         return True
 
 
-def configure_logging() -> None:
+def configure_logging(secrets: tuple[str, ...] = ()) -> None:
+    for secret in secrets:
+        register_secret(secret)
     logging.basicConfig(
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         level=logging.INFO,
@@ -85,7 +100,14 @@ def build_application(settings: Settings) -> Application:
 
 
 def run_bot(settings: Settings) -> None:
-    configure_logging()
-    app = build_application(settings)
-    logger.info("Бот запущен (polling). Ctrl+C для остановки.")
-    app.run_polling(drop_pending_updates=True)
+    configure_logging(secrets=(settings.telegram_bot_token,))
+    try:
+        app = build_application(settings)
+        logger.info("Бот запущен (polling). Ctrl+C для остановки.")
+        app.run_polling(drop_pending_updates=True)
+    except Exception:
+        # A rejected token raises InvalidToken("The token `<token>` was rejected ...")
+        # at startup. The default traceback goes to stderr unfiltered, so log it
+        # through the redacting handler and exit with a non-zero code instead.
+        logger.critical("Бот остановлен из-за ошибки", exc_info=True)
+        raise SystemExit(1) from None

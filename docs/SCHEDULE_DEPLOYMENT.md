@@ -1,22 +1,33 @@
-# Расписание и развёртывание на AEZA
+# Расписание и перенос на AEZA
 
-Цель: одна автоматическая рассылка в понедельник и четверг, 05:00 Europe/Minsk.
-Единственный автоматический отправитель — бот `python src/main.py --bot` на AEZA
-(черновик с кнопками одобрения в `TELEGRAM_CHAT_ID`). В GitHub Actions нет
-`schedule`; `workflow_dispatch` отправляет отчёт только при ручном запуске.
-Сервис `qa_bot.service` на FORNEX остановлен и выключен, каталог сохранён для отката.
+Цель: одна автоматическая рассылка в понедельник и четверг. Задание стартует
+в 05:00 Europe/Minsk; черновик приходит после окончания сбора (обычно через
+минуты, не в ту же секунду). Перезапуск контейнера после 05:00 в день рассылки
+пропускает этот запуск до следующего пн/чт. `misfire_grace_time` 15 минут
+спасает только занятый цикл уже работающего процесса, а не старт после 05:00.
 
-## Окружения
+Единственный автоматический отправитель — `python src/main.py --bot` на AEZA:
+черновик с кнопками одобрения в `TELEGRAM_CHAT_ID`. `DRY_RUN=true` блокирует
+только CLI `python src/main.py` без `--send`; автосбор и `/digest` всё равно
+пишут в Telegram.
 
-| Где | Каталог | Запуск | Расписание |
-| --- | --- | --- | --- |
-| AEZA | `/srv/vic-workspace/bots/qa_bot` | `docker compose -f compose.vic.yaml` | `SCHEDULE_ENABLED=true` |
-| FORNEX | `/root/qa_bot` | `qa_bot.service` | выключен (откат) |
-| GitHub Actions | — | только вручную | нет |
+В GitHub Actions нет `schedule`. Workflow «IT digest» отключён вручную (13.10);
+повторно не включать и не нажимать Run workflow: `workflow_dispatch` шлёт
+готовый отчёт без кнопок, это другой формат и второй отправитель.
 
-## Настройки `.env` на AEZA
+## Текущее состояние (2026-10-13, до переключения)
 
-Изменять только эти строки, остальные поля и права `0600` сохранить:
+| Где | Факт | Расписание |
+| --- | --- | --- |
+| GitHub Actions | workflow «IT digest» disabled | нет |
+| FORNEX | `qa_bot.service` active+enabled, `/root/qa_bot`, EnvironmentFile=`/root/qa_bot/.env` | в `.env` `tue,fri`, старый код фактически пн/чт 05:00; 12.10 sendMessage HTTP 200 в 05:01 |
+| AEZA | код в `/srv/vic-workspace/bots/qa_bot`, контейнер не запущен | в `.env` `SCHEDULE_ENABLED=true`, `DRY_RUN=true`; не стартовать, пока код не обновлён |
+| Токен | раскрыт в журнале FORNEX | перевыпуск ещё не сделан |
+| PR | [#16](https://github.com/viktor-qatester/perviy-agent/pull/16) draft | не сливать до переключения |
+
+## Целевые настройки `.env` на AEZA
+
+Менять только эти строки (скрипт или точечная правка). Токены не печатать.
 
 ```dotenv
 SCHEDULE_ENABLED=true
@@ -25,64 +36,128 @@ SCHEDULE_TIME=05:00
 TIMEZONE=Europe/Minsk
 ```
 
-Устаревшие `SCHEDULE_RUN_TIME` и `SCHEDULE_TIMEZONE` удалить: `SCHEDULE_TIME` и
-`TIMEZONE` имеют приоритет. Не публиковать `.env` и не выводить окружение с токенами.
+Удалить `SCHEDULE_RUN_TIME` и `SCHEDULE_TIMEZONE`. Права `.env` — `0600`.
 
 ## Порядок переключения
 
-1. Резервные копии с SHA256, права `0600`:
-   - AEZA: каталог `qa_bot` целиком, включая `.env` и `data/`;
-   - FORNEX: `/root/qa_bot` и `/etc/systemd/system/qa_bot.service`.
-2. Перенести актуальный `data/` с FORNEX на AEZA (`bot_state.json`, `events.json`,
-   `manual_events.json`, `career_portals.json`).
-3. На AEZA обновить код до `main` (`git fetch` + `git merge --ff-only`). Локальные
-   `Dockerfile.vic`, `compose.vic.yaml` не в Git и не перезаписываются.
-   В `compose.vic.yaml`: `restart: unless-stopped`, `container_name: vic-qa-bot`.
-4. Собрать образ и проверить расписание без отправки и без polling:
+Не запускать контейнер на AEZA, пока FORNEX не остановлен. Иначе два polling.
 
-   ```bash
-   docker compose -f compose.vic.yaml build
-   docker compose -f compose.vic.yaml run --rm --no-deps app python -m unittest discover -s tests
-   docker compose -f compose.vic.yaml run --rm --no-deps app python -c '
-   from datetime import datetime, timedelta
-   from types import SimpleNamespace
-   from zoneinfo import ZoneInfo
-   from telegram.ext import JobQueue
-   from src.bot.schedule import setup_schedule
-   from src.config import settings
-   q = JobQueue(); setup_schedule(SimpleNamespace(job_queue=q), settings)
-   job, = q.scheduler.get_jobs()
-   now, prev = datetime.now(ZoneInfo(settings.timezone)), None
-   for _ in range(6):
-       prev = job.trigger.get_next_fire_time(prev, now); print(prev.strftime("%a %Y-%m-%d %H:%M %z"))
-       now = prev + timedelta(seconds=1)
-   '
-   ```
+### 1. Резервные копии (FORNEX ещё работает)
 
-   Ожидается только `Mon`/`Thu` в `05:00 +0300`.
-5. FORNEX: `systemctl stop qa_bot.service && systemctl disable qa_bot.service`.
-6. Перевыпустить токен в @BotFather (`/revoke`). Старый токен перестаёт работать,
-   поэтому старые копии больше не могут отправлять и опрашивать Telegram.
-7. Записать новый токен в `.env` на AEZA без истории shell и без вывода на экран
-   (`read -rs`), обновить секрет `TELEGRAM_BOT_TOKEN` в GitHub через настройки репозитория.
-8. Запустить: `docker compose -f compose.vic.yaml up -d`.
-9. Проверить:
-   - `docker ps --filter name=qa` — ровно один контейнер `vic-qa-bot`;
-   - FORNEX: `systemctl is-active qa_bot.service` → `inactive`, `is-enabled` → `disabled`;
-   - `docker logs vic-qa-bot` содержит `Schedule enabled: mon,thu at 05:00 (Europe/Minsk), days=(1, 4)`;
-   - в логах нет `Conflict` (второй polling) и нет строк вида `bot<цифры>:`.
+Права архивов `0600`, не смотреть содержимое `.env`.
+
+- AEZA: tar каталога `/srv/vic-workspace/bots/qa_bot` (включая `.env` и `data/`)
+  в `/srv/vic-workspace/backups/qa_bot-<дата>/` плюс SHA256.
+- FORNEX: tar `/root/qa_bot` и копия `/etc/systemd/system/qa_bot.service`
+  в отдельный архив плюс SHA256.
+
+### 2. Код и compose на AEZA (контейнер всё ещё down)
+
+```bash
+cd /srv/vic-workspace/bots/qa_bot
+git fetch origin
+git merge --ff-only origin/main   # после merge PR; до merge: origin/fix/aeza-mon-thu-schedule
+```
+
+`Dockerfile.vic` и `compose.vic.yaml` не в Git. В compose: `restart: unless-stopped`,
+`container_name: vic-qa-bot`. Собрать образ, контейнер не поднимать:
+
+```bash
+docker compose -f compose.vic.yaml build
+```
+
+### 3. Проверка расписания без отправки и без polling
+
+```bash
+docker compose -f compose.vic.yaml run --rm --no-deps app python -m unittest discover -s tests
+docker compose -f compose.vic.yaml run --rm --no-deps app python scripts/check_schedule.py --expect-days mon,thu
+```
+
+Ожидаются только `Mon`/`Thu` в `05:00 +0300`. Ближайшие даты от 13.10.2026:
+чт 15.10, пн 19.10, чт 22.10, пн 26.10, чт 29.10, пн 02.11. Сеть и `send_*`
+скрипт не вызывает.
+
+### 4. Остановить FORNEX
+
+```bash
+systemctl stop qa_bot.service
+systemctl disable qa_bot.service
+systemctl is-active qa_bot.service    # inactive
+systemctl is-enabled qa_bot.service   # disabled
+```
+
+Каталог `/root/qa_bot` и unit-файл не удалять.
+
+### 5. Финальная синхронизация `data/` (обязательно после stop)
+
+Копия до остановки не годится: FORNEX мог обновить `bot_state.json` / `events.json`.
+
+С FORNEX на AEZA, только `data/` (`bot_state.json`, `events.json`,
+`manual_events.json`, `career_portals.json` и остальные файлы там). После
+распаковки на AEZA сверить размер и mtime с FORNEX. `.env` этим шагом не копировать.
+
+### 6. Перевыпуск токена (делает владелец в @BotFather)
+
+`/revoke`. Старый токен из журнала перестаёт работать. До этого шага новый
+токен никуда не записывать.
+
+### 7. Записать новый токен без экрана и истории
+
+Нужен TTY (`ssh -t`). Скрипт читает значение скрытым вводом, не печатает его,
+меняет только одну строку, кладёт `.env.bak-<время>` с режимом `0600`.
+
+```bash
+# AEZA
+ssh -t -i ... root@77.110.101.123 \
+  'bash /srv/vic-workspace/bots/qa_bot/scripts/set_env_secret.sh /srv/vic-workspace/bots/qa_bot/.env TELEGRAM_BOT_TOKEN --verify'
+# FORNEX (сервис не запускать; нужно для отката). Скрипт можно скопировать без обновления кода бота.
+ssh -t ... root@31.172.78.193 \
+  'bash /root/qa_bot/scripts/set_env_secret.sh /root/qa_bot/.env TELEGRAM_BOT_TOKEN'
+```
+
+`--verify` вызывает только `getMe` (сообщение не отправляется). Ожидание:
+`getMe: ok @<имя_бота>`. Секрет `TELEGRAM_BOT_TOKEN` в GitHub — вручную в
+настройках репозитория, после перевыпуска; `gh` и печать секрета не использовать.
+
+### 8. Запуск только AEZA
+
+Завершить до чт 15.10 05:00 Europe/Minsk. Не стартовать между 05:00 и ~05:15
+в день рассылки: этот запуск будет пропущен.
+
+```bash
+cd /srv/vic-workspace/bots/qa_bot
+docker compose -f compose.vic.yaml up -d
+```
+
+### 9. Проверка после запуска
+
+- `docker ps --filter name=vic-qa-bot` — ровно один контейнер;
+- FORNEX: `inactive` / `disabled`;
+- в `docker logs vic-qa-bot` есть
+  `Schedule enabled: mon,thu at 05:00 (Europe/Minsk), days=(1, 4)`;
+- нет `Conflict` (второй polling) и нет подстроки `bot` + цифры + `:`;
+- есть фильтр токена: искусственный токен в тесте, не боевой.
+
+Первая живая проверка доставки — чт 15.10: в логе
+`Scheduled digest: starting collect pipeline`, затем
+`Digest draft delivered: scheduled=True ...`. Сообщение в чате — черновик
+с кнопками, не готовый канал.
 
 ## Откат
 
-1. AEZA: `docker compose -f compose.vic.yaml down` (данные остаются в `data/`).
-2. Вернуть `data/` на FORNEX, записать новый токен в `/root/qa_bot/.env`.
-3. На FORNEX старый код: в нём `tue,fri` срабатывает в понедельник и четверг.
-   Либо оставить `SCHEDULE_DAYS=tue,fri`, либо сначала обновить код до `main`
-   и указать `mon,thu`.
-4. `systemctl enable --now qa_bot.service`, проверить журнал.
+1. AEZA: `docker compose -f compose.vic.yaml down` (`data/` на диске остаётся).
+2. Скопировать актуальный `data/` с AEZA на FORNEX.
+3. Новый токен уже должен быть в `/root/qa_bot/.env` (шаг 7). Не возвращать
+   раскрытый токен.
+4. Старый код FORNEX: оставить `SCHEDULE_DAYS=tue,fri` (фактически пн/чт).
+   `mon,thu` на старом коде даст вс/ср. Либо сначала обновить код и тогда `mon,thu`.
+5. `systemctl enable --now qa_bot.service`, смотреть журнал без `cat .env`.
+
+Аварийный ручной отчёт: включить workflow «IT digest» и Run workflow — это
+готовый текст без кнопок, не штатный путь.
 
 ## Логи
 
-`run_bot` поднимает уровень `httpx`/`httpcore` до WARNING и маскирует токен
-во всех записях. Журналы, записанные до перевыпуска, содержат старый токен:
-после `/revoke` он недействителен.
+`run_bot` поднимает `httpx`/`httpcore` до WARNING, маскирует токен в записях
+и в traceback при стартовой ошибке. Журналы FORNEX до `/revoke` содержат
+старый токен; после отзыва он бесполезен. Чистить journald не обязательно.
