@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 import urllib.error
@@ -10,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from src.models import Event
+
+logger = logging.getLogger(__name__)
 
 _USER_AGENT = "PerviyAgent/0.3 (personal monitoring; +local)"
 _CARD_SPLIT = 'class="vacancy-card--'
@@ -64,9 +67,16 @@ class RabotaByQaSource:
         now = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
         seen_ids: set[str] = set()
         events: list[Event] = []
+        last_error: Exception | None = None
 
         for url, is_internship_page in self._search_urls():
-            html = self._fetch_html(url)
+            try:
+                html = self._fetch_html(url)
+            except Exception as exc:  # noqa: BLE001 — one page must not drop the others
+                last_error = exc
+                logger.warning("%s: skip search URL %s: %s", self.name, url, exc)
+                time.sleep(self.request_delay_sec)
+                continue
             for card in self._parse_cards(html, is_internship_page=is_internship_page):
                 if card.vacancy_id in seen_ids:
                     continue
@@ -78,6 +88,8 @@ class RabotaByQaSource:
                     return events
             time.sleep(self.request_delay_sec)
 
+        if not events and last_error:
+            raise last_error
         return events
 
     def _search_urls(self) -> list[tuple[str, bool]]:
