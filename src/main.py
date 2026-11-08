@@ -48,6 +48,10 @@ def run_pipeline(*, dry_run: bool) -> int:
 
     save_events(settings.events_file, events)
     digest = build_digest(events, days=settings.digest_days_ahead)
+    if errors:
+        # HITL drafts already show this in the header; --send (GitHub Actions)
+        # used to deliver a bare "no events" body while the job still succeeded.
+        digest = f"⚠ Ошибки источников: {errors}\n\n{digest}"
 
     notify_results = deliver_digest(settings, digest, dry_run=dry_run)
 
