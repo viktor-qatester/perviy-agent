@@ -21,26 +21,53 @@ class ScheduleTests(unittest.TestCase):
 
 
 class DeliveryTests(unittest.TestCase):
-    def test_cli_send_uses_direct_delivery(self):
+    def _run_pipeline(self, *, events, errors, digest, stats=None):
         with tempfile.TemporaryDirectory() as temp:
             settings = SimpleNamespace(
                 logs_dir=Path(temp) / "logs",
                 events_file=Path(temp) / "events.json",
                 digest_days_ahead=7,
             )
-            stats = Mock(added=1, skipped_duplicate=0, kept_existing=0)
-            stats.to_dict.return_value = {"added": 1}
+            if stats is None:
+                stats = Mock(added=0, skipped_duplicate=0, kept_existing=0)
+                stats.to_dict.return_value = {"added": 0}
             source = SimpleNamespace(name="source")
             with (
                 patch.object(main, "settings", settings),
                 patch.object(main, "build_source_list", return_value=[source]),
-                patch.object(main, "collect", return_value=([], {}, stats)),
+                patch.object(main, "collect", return_value=(events, errors, stats)),
                 patch.object(main, "save_events"),
-                patch.object(main, "build_digest", return_value="digest"),
+                patch.object(main, "build_digest", return_value=digest),
                 patch.object(main, "deliver_digest", return_value={"telegram": "ok"}) as delivery,
             ):
-                self.assertEqual(main.run_pipeline(dry_run=False), 0)
-            delivery.assert_called_once_with(settings, "digest", dry_run=False)
+                code = main.run_pipeline(dry_run=False)
+            return code, settings, delivery
+
+    def test_cli_send_uses_direct_delivery(self):
+        stats = Mock(added=1, skipped_duplicate=0, kept_existing=0)
+        stats.to_dict.return_value = {"added": 1}
+        code, settings, delivery = self._run_pipeline(
+            events=[], errors={}, digest="digest", stats=stats
+        )
+        self.assertEqual(code, 0)
+        delivery.assert_called_once_with(settings, "digest", dry_run=False)
+
+    def test_cli_send_includes_source_errors_in_telegram_body(self):
+        """GHA --send used to ship 'no events' with no hint that sources failed."""
+        errors = {"rabota_by:qa_junior": "HTTP 403", "habr_career:qa_remote_junior": "timeout"}
+        empty = "На ближайшие 7 дней новых событий не найдено."
+        code, settings, delivery = self._run_pipeline(
+            events=[], errors=errors, digest=empty
+        )
+        self.assertEqual(code, 0)
+        sent = delivery.call_args.args[1]
+        self.assertIn("Ошибки источников", sent)
+        self.assertIn("rabota_by:qa_junior", sent)
+        self.assertIn("HTTP 403", sent)
+        self.assertIn("habr_career:qa_remote_junior", sent)
+        self.assertIn(empty, sent)
+        # Job still succeeds: individual source outages must not fail CI.
+        delivery.assert_called_once_with(settings, sent, dry_run=False)
 
     def test_direct_telegram_delivery_does_not_create_pending_draft(self):
         settings = SimpleNamespace(
