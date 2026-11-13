@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from uuid import uuid4
 
 from src.models import Event, dedupe_key, is_telegram_rss, is_upcoming, normalize_url
 from src.sources.base import Source
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -32,7 +37,18 @@ class CollectStats:
 def load_events(path: Path) -> list[Event]:
     if not path.exists():
         return []
-    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw_text = path.read_text(encoding="utf-8")
+    if not raw_text.strip():
+        logger.warning("%s is empty; starting from an empty event store", path)
+        return []
+    try:
+        raw = json.loads(raw_text)
+    except json.JSONDecodeError:
+        logger.warning("%s is not valid JSON; starting from an empty event store", path)
+        return []
+    if not isinstance(raw, list):
+        logger.warning("%s is not a JSON list; starting from an empty event store", path)
+        return []
     return [Event.from_dict(item) for item in raw]
 
 
@@ -102,4 +118,13 @@ def collect(
 def save_events(path, events: list[Event]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = [e.to_dict() for e in events]
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    destination = Path(path)
+    temporary = destination.with_name(f"{destination.name}.{uuid4().hex}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
