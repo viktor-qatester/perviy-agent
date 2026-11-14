@@ -16,25 +16,33 @@ _CARD_SPLIT = 'class="vacancy-card--'
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
 
+# «тестиров» is a stem (тестировщик, тестированию). A trailing \b after the
+# group made those Russian titles miss entirely.
 _QA_TITLE_RE = re.compile(
-    r"\b("
-    r"qa|"
+    r"(?i)(?:"
+    r"\bqa\b|"
     r"quality assurance|"
     r"software tester|"
     r"test engineer|"
     r"тестиров|"
     r"manual test|"
     r"automation test"
-    r")\b",
-    re.IGNORECASE,
+    r")"
 )
 
 _JUNIOR_RE = re.compile(
-    r"\b(trainee|junior|intern|стажир|pre-trainee|beginner|начинающ)\b|без опыта",
-    re.IGNORECASE,
+    r"(?i)(?:"
+    r"\btrainee\b|"
+    r"\bjunior\b|"
+    r"\bintern\b|"
+    r"стаж[иеё]р|"  # стажер, стажёр, стажировка
+    r"\bpre-trainee\b|"
+    r"начинающ|"
+    r"без опыта"
+    r")"
 )
 
-_STAZHIROVKI_HINT = re.compile(r"стажир|trainee|intern|практик", re.IGNORECASE)
+_STAZHIROVKI_HINT = re.compile(r"стаж[иеё]р|trainee|intern|практик", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -82,6 +90,8 @@ class RabotaByQaSource:
 
     def _search_urls(self) -> list[tuple[str, bool]]:
         area = self.area
+        # Second flag: search is already intern / no-experience scoped, so a
+        # QA title is enough (do not also require «junior» in the title).
         return [
             (
                 f"https://rabota.by/stazhirovki?q=QA&area={area}",
@@ -90,17 +100,17 @@ class RabotaByQaSource:
             (
                 "https://rabota.by/search/vacancy?"
                 f"text=QA&experience=noExperience&area={area}&order_by=publication_time",
-                False,
+                True,
             ),
             (
                 "https://rabota.by/search/vacancy?"
                 f"text=QA+trainee&experience=noExperience&area={area}&order_by=publication_time",
-                False,
+                True,
             ),
             (
                 "https://rabota.by/search/vacancy?"
                 f"text=QA+junior&experience=noExperience&area={area}&order_by=publication_time",
-                False,
+                True,
             ),
         ]
 
