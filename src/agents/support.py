@@ -13,6 +13,30 @@ from src.models import Event, format_event_date, within_days
 
 logger = logging.getLogger(__name__)
 
+_SUPPORT_LIST_LIMIT = 10
+
+
+def _prioritize_for_support(events: list[Event]) -> list[Event]:
+    """Live vacancies first, then newest dated events.
+
+    Collector stores dated events oldest-first and undated internships last
+    (``date or "9999-99-99"``). The keyword FAQ only prints 10 rows, so that
+    order hides still-open rabota.by / Habr listings behind older RSS posts.
+    """
+    vacancies: list[Event] = []
+    dated: list[Event] = []
+    other: list[Event] = []
+    for event in events:
+        if event.date:
+            dated.append(event)
+        elif event.type in ("internship", "vacancy"):
+            vacancies.append(event)
+        else:
+            other.append(event)
+    vacancies.sort(key=lambda e: e.fetched_at, reverse=True)
+    dated.sort(key=lambda e: e.date or "", reverse=True)
+    return vacancies + dated + other
+
 
 def _keyword_answer(question: str, events: list[Event], days: int = 7) -> str:
     q = question.lower().strip()
@@ -44,14 +68,16 @@ def _keyword_answer(question: str, events: list[Event], days: int = 7) -> str:
     if not filtered:
         return "В моей базе сейчас нет подходящих событий. Источники могли не обновиться."
 
+    filtered = _prioritize_for_support(filtered)
+
     lines = ["Вот что нашёл (только из базы событий):", ""]
-    for event in filtered[:10]:
+    for event in filtered[:_SUPPORT_LIST_LIMIT]:
         date_str = format_event_date(event)
         lines.append(f"• {event.title} — {date_str}")
         lines.append(f"  {event.url}")
 
-    if len(filtered) > 10:
-        lines.append(f"\n…и ещё {len(filtered) - 10} событий.")
+    if len(filtered) > _SUPPORT_LIST_LIMIT:
+        lines.append(f"\n…и ещё {len(filtered) - _SUPPORT_LIST_LIMIT} событий.")
 
     return "\n".join(lines)
 
@@ -70,6 +96,7 @@ def _llm_answer(question: str, events: list[Event]) -> str:
 
 
 def answer(question: str, events: list[Event], days: int = 7) -> str:
+    events = _prioritize_for_support(events)
     client = get_llm_client(settings)
 
     try:
