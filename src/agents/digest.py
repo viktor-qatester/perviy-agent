@@ -7,7 +7,7 @@ import logging
 from src.config import settings
 from src.llm.client import LLMError, events_to_json, get_llm_client
 from src.llm.prompts import DIGEST_SYSTEM
-from src.models import Event, format_event_date, is_habr_career, is_rabota_by, is_telegram_rss, recently_fetched, recently_published, within_days
+from src.models import Event, format_event_date, in_digest_window
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +46,7 @@ def _llm_digest(events: list[Event], days: int) -> str:
 
 
 def build_digest(events: list[Event], days: int = 7) -> str:
-    upcoming = [
-        e
-        for e in events
-        if within_days(e, days)
-        or (is_telegram_rss(e) and recently_published(e, days))
-        or (is_rabota_by(e) and recently_fetched(e, days))
-        or (is_habr_career(e) and recently_fetched(e, days))
-    ]
+    upcoming = [e for e in events if in_digest_window(e, days)]
 
     try:
         return _llm_digest(upcoming, days)

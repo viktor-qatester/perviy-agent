@@ -9,7 +9,7 @@ from src.config import settings
 from src.llm.client import LLMError, events_to_json, get_llm_client
 from src.llm.guardrails import check_support_answer
 from src.llm.prompts import SUPPORT_SYSTEM
-from src.models import Event, format_event_date, within_days
+from src.models import Event, format_event_date, in_digest_window
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,9 @@ def _keyword_answer(question: str, events: list[Event], days: int = 7) -> str:
         filtered = [e for e in filtered if "python" in [t.lower() for t in e.tags]]
 
     if "недел" in q or "week" in q:
-        filtered = [e for e in filtered if within_days(e, days)]
+        # Same window as the digest: upcoming dated events, recent RSS posts,
+        # and still-open vacancies (no event date — within_days() is always false).
+        filtered = [e for e in filtered if in_digest_window(e, days)]
 
     if not filtered:
         return "В моей базе сейчас нет подходящих событий. Источники могли не обновиться."
