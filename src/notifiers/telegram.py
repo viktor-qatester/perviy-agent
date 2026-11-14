@@ -22,6 +22,7 @@ HITL_KEYBOARD: list[list[dict[str, str]]] = [
 
 
 def send_telegram_message(*, token: str, chat_id: str, text: str) -> None:
+    token, chat_id = token.strip(), str(chat_id).strip()
     if not token or not chat_id:
         raise ValueError("Telegram: заполните TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в .env")
 
@@ -31,6 +32,9 @@ def send_telegram_message(*, token: str, chat_id: str, text: str) -> None:
 
 def send_telegram_hitl_draft(*, token: str, chat_id: str, title: str, digest: str) -> None:
     """Send digest draft with HITL inline keyboard on the last chunk."""
+    token, chat_id = token.strip(), str(chat_id).strip()
+    if not token or not chat_id:
+        raise ValueError("Telegram: заполните TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в .env")
     body = f"{title}\n\n{digest}"
     chunks = _split_text(body, limit=4000)
     for index, chunk in enumerate(chunks):
@@ -45,6 +49,7 @@ def _post_message(
     text: str,
     reply_markup: list[list[dict[str, str]]] | None = None,
 ) -> None:
+    token, chat_id = token.strip(), str(chat_id).strip()
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload: dict[str, Any] = {
         "chat_id": chat_id,

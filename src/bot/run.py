@@ -29,12 +29,13 @@ async def _post_init(app: Application) -> None:
 
 
 def build_application(settings: Settings) -> Application:
-    if not settings.telegram_bot_token:
+    token = settings.telegram_bot_token.strip()
+    if not token:
         raise ValueError("TELEGRAM_BOT_TOKEN не задан в .env")
 
     app = (
         Application.builder()
-        .token(settings.telegram_bot_token)
+        .token(token)
         .post_init(_post_init)
         .build()
     )
