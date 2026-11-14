@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from src.agents.collector import CollectStats
 from src.bot import handlers
 from src.bot.state import BotState
 from src.notifiers.telegram import HITL_CALLBACK_APPROVE, HITL_CALLBACK_CANCEL
@@ -99,6 +100,68 @@ class HitlTests(unittest.IsolatedAsyncioTestCase):
             keyboard.inline_keyboard[0][0].callback_data,
             f"{HITL_CALLBACK_APPROVE}:{state.draft_id}",
         )
+
+    async def test_new_digest_blocked_by_partial_publish_resends_buttons(self):
+        state = BotState()
+        state.set_pending("partial digest")
+        state.published_chunks = 1
+        state.save(self.settings.bot_state_file)
+        draft_id = state.draft_id
+
+        with patch.object(handlers.pipeline, "run_collect_and_digest") as collect:
+            await handlers.send_digest_draft(self.bot, "123", self.settings)
+
+        collect.assert_not_called()
+        saved = BotState.load(self.settings.bot_state_file)
+        self.assertEqual(saved.pending_digest, "partial digest")
+        self.assertEqual(saved.published_chunks, 1)
+        self.assertEqual(saved.draft_id, draft_id)
+        self.bot.send_message.assert_awaited_once()
+        kwargs = self.bot.send_message.await_args.kwargs
+        self.assertEqual(kwargs["text"], handlers._PARTIAL_PUBLISH_PROMPT)
+        self.assertEqual(
+            kwargs["reply_markup"].inline_keyboard[0][0].callback_data,
+            f"{HITL_CALLBACK_APPROVE}:{draft_id}",
+        )
+
+    async def test_cmd_digest_does_not_crash_when_partial_publish_pending(self):
+        state = BotState()
+        state.set_pending("partial digest")
+        state.published_chunks = 1
+        state.save(self.settings.bot_state_file)
+
+        update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=123),
+            message=SimpleNamespace(reply_text=AsyncMock()),
+        )
+        with patch.object(handlers.pipeline, "run_collect_and_digest") as collect:
+            await handlers.cmd_digest(update, self.context)
+
+        collect.assert_not_called()
+        update.message.reply_text.assert_not_awaited()
+        self.assertEqual(BotState.load(self.settings.bot_state_file).published_chunks, 1)
+        self.bot.send_message.assert_awaited_once()
+
+    async def test_corrupt_partial_state_allows_new_digest(self):
+        state = BotState()
+        state.published_chunks = 1
+        state.pending_digest = ""
+        state.draft_id = ""
+        state.save(self.settings.bot_state_file)
+        stats = CollectStats(added=1)
+
+        with patch.object(
+            handlers.pipeline,
+            "run_collect_and_digest",
+            return_value=("fresh digest", 1, {}, stats),
+        ):
+            await handlers.send_digest_draft(self.bot, "123", self.settings)
+
+        saved = BotState.load(self.settings.bot_state_file)
+        self.assertEqual(saved.pending_digest, "fresh digest")
+        self.assertEqual(saved.published_chunks, 0)
+        self.assertTrue(saved.draft_id)
+        self.bot.send_message.assert_awaited()
 
 
 if __name__ == "__main__":
