@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from src.models import Event, dedupe_key, is_telegram_rss, is_upcoming, normalize_url
+from src.models import Event, dedupe_key, is_open_vacancy, is_telegram_rss, is_upcoming, normalize_url
 from src.sources.base import Source
 
 
@@ -37,7 +37,7 @@ def load_events(path: Path) -> list[Event]:
 
 
 def _keep_in_storage(event: Event) -> bool:
-    if is_telegram_rss(event):
+    if is_telegram_rss(event) or is_open_vacancy(event):
         return True
     if event.date and not is_upcoming(event, date.today()):
         return False
@@ -77,7 +77,12 @@ def collect(
                     stats.skipped_duplicate += 1
                     continue
 
-                if not is_telegram_rss(event) and event.date and not is_upcoming(event, date.today()):
+                if (
+                    not is_telegram_rss(event)
+                    and not is_open_vacancy(event)
+                    and event.date
+                    and not is_upcoming(event, date.today())
+                ):
                     stats.skipped_past += 1
                     continue
 
