@@ -108,10 +108,10 @@ def is_open_vacancy(event: Event) -> bool:
 
 def format_event_date(event: Event) -> str:
     """Human-readable date line for digest and support."""
-    if event.date:
-        return event.date
     if is_open_vacancy(event):
         return "🟢 Набор открыт"
+    if event.date:
+        return event.date
     return "дата уточняется"
 
 
