@@ -45,15 +45,24 @@ def _llm_digest(events: list[Event], days: int) -> str:
     return client.complete(DIGEST_SYSTEM, user)
 
 
+def _in_digest_window(event: Event, days: int) -> bool:
+    if within_days(event, days):
+        return True
+    if is_telegram_rss(event) and recently_published(event, days):
+        return True
+    if is_rabota_by(event) and recently_fetched(event, days):
+        return True
+    if is_habr_career(event) and recently_fetched(event, days):
+        return True
+    # Curated catalog rows (meetup channels, calendars) have no event date.
+    # within_days() rejects date=None, so without this they never reach the digest.
+    if event.source == "manual_feed" and not event.date:
+        return True
+    return False
+
+
 def build_digest(events: list[Event], days: int = 7) -> str:
-    upcoming = [
-        e
-        for e in events
-        if within_days(e, days)
-        or (is_telegram_rss(e) and recently_published(e, days))
-        or (is_rabota_by(e) and recently_fetched(e, days))
-        or (is_habr_career(e) and recently_fetched(e, days))
-    ]
+    upcoming = [e for e in events if _in_digest_window(e, days)]
 
     try:
         return _llm_digest(upcoming, days)
